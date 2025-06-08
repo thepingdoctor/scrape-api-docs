@@ -24,8 +24,8 @@ A Python script to crawl and scrape documentation websites, converting their con
 
 1.  **Clone the repository (or download the script):**
     ```bash
-    git clone <your-repository-url>
-    cd <repository-directory>
+    git clone https://github.com/thepingdoctor/scrape-api-docs
+    cd scrape-api-docs
     ```
     Or, simply download the `scrape.py` file.
 
