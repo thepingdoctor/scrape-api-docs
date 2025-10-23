@@ -14,7 +14,7 @@ A Python script to crawl and scrape documentation websites, converting their con
 
 ## Requirements
 
-*   Python 3.8 or higher
+*   Python 3.9 or higher
 *   Poetry (for dependency management and installation)
 
 ## Installation
@@ -60,7 +60,32 @@ python scrape.py <URL>
 
 ## Usage
 
-After installation with Poetry or pip, use the `scrape-docs` command:
+### Web Interface (Streamlit UI)
+
+Launch the interactive web interface:
+
+```bash
+scrape-docs-ui
+```
+
+This will open a comprehensive web interface in your browser with:
+- 📝 Easy URL input with validation
+- ⚙️ Advanced configuration options (timeout, max pages, custom filename)
+- 📊 Real-time progress tracking with visual feedback
+- 📄 Results preview and downloadable output
+- ⚠️ Detailed error reporting
+- 🎨 Modern, user-friendly interface
+
+**Or run with Streamlit directly:**
+```bash
+streamlit run src/scrape_api_docs/streamlit_app.py
+```
+
+**For detailed UI usage instructions, see the [Streamlit UI Guide](STREAMLIT_UI_GUIDE.md).**
+
+### Command-Line Interface
+
+For quick command-line usage:
 
 ```bash
 scrape-docs <URL>
