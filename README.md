@@ -14,38 +14,99 @@ A Python script to crawl and scrape documentation websites, converting their con
 
 ## Requirements
 
-*   Python 3.x
-*   The following Python libraries:
-    *   `requests`
-    *   `beautifulsoup4`
-    *   `markdownify`
+*   Python 3.8 or higher
+*   Poetry (for dependency management and installation)
 
 ## Installation
 
-1.  **Clone the repository (or download the script):**
+### Using Poetry (Recommended)
+
+1.  **Clone the repository:**
     ```bash
     git clone https://github.com/thepingdoctor/scrape-api-docs
     cd scrape-api-docs
     ```
-    Or, simply download the `scrape.py` file.
 
-2.  **Install dependencies:**
-    It's recommended to use a virtual environment:
+2.  **Install with Poetry:**
     ```bash
-    python -m venv venv
-    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+    poetry install
     ```
-    Then install the required packages:
+
+3.  **Activate the virtual environment:**
     ```bash
-    pip install requests beautifulsoup4 markdownify
+    poetry shell
     ```
+
+### Using pip (Alternative)
+
+You can also install directly from the repository:
+```bash
+pip install git+https://github.com/thepingdoctor/scrape-api-docs.git
+```
+
+Or install in development mode:
+```bash
+git clone https://github.com/thepingdoctor/scrape-api-docs
+cd scrape-api-docs
+pip install -e .
+```
+
+### Legacy Method (Direct Script)
+
+If you prefer to use the standalone script without packaging:
+```bash
+python scrape.py <URL>
+```
 
 ## Usage
 
-Run the script from your terminal, providing the base URL of the documentation site you want to scrape.
+After installation with Poetry or pip, use the `scrape-docs` command:
 
 ```bash
-python scrape.py <URL>
+scrape-docs <URL>
+```
+
+**Example:**
+```bash
+scrape-docs https://netboxlabs.com/docs/netbox/
+```
+
+## Development
+
+### Setting up for development
+
+1.  Clone the repository and install dependencies:
+    ```bash
+    git clone https://github.com/thepingdoctor/scrape-api-docs
+    cd scrape-api-docs
+    poetry install
+    ```
+
+2.  Run tests (when available):
+    ```bash
+    poetry run pytest
+    ```
+
+3.  Format code with Black:
+    ```bash
+    poetry run black src/
+    ```
+
+4.  Run linting:
+    ```bash
+    poetry run flake8 src/
+    ```
+
+### Building and Publishing
+
+Build the package:
+```bash
+poetry build
+```
+
+Publish to PyPI (requires credentials):
+```bash
+poetry publish
 ```
 
 ## Disclaimer

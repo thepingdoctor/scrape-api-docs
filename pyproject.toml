@@ -1,0 +1,54 @@
+[tool.poetry]
+name = "scrape-api-docs"
+version = "0.1.0"
+description = "A Python tool to crawl and scrape documentation websites, converting their content into a single, consolidated Markdown file"
+authors = ["Adam Blackington"]
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/thepingdoctor/scrape-api-docs"
+repository = "https://github.com/thepingdoctor/scrape-api-docs"
+keywords = ["documentation", "scraper", "markdown", "crawler", "web-scraping"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Documentation",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Software Development :: Documentation",
+]
+packages = [{include = "scrape_api_docs", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.8.1"
+requests = "^2.31.0"
+beautifulsoup4 = "^4.12.0"
+markdownify = "^0.11.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+black = "^23.7.0"
+flake8 = "^6.1.0"
+mypy = "^1.5.0"
+
+[tool.poetry.scripts]
+scrape-docs = "scrape_api_docs.__main__:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 100
+target-version = ['py38']
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
