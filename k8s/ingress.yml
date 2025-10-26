@@ -1,0 +1,102 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: scraper-ingress
+  namespace: scraper
+  annotations:
+    # Ingress class
+    kubernetes.io/ingress.class: nginx
+
+    # SSL/TLS
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-connections: "50"
+
+    # Request size limits
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+
+    # Timeouts
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Frame-Options "SAMEORIGIN" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header X-XSS-Protection "1; mode=block" always;
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+      add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+
+    # CORS (if needed)
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://scraper.example.com"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization"
+
+    # Monitoring
+    nginx.ingress.kubernetes.io/enable-modsecurity: "true"
+    nginx.ingress.kubernetes.io/enable-owasp-core-rules: "true"
+
+spec:
+  tls:
+  - hosts:
+    - scraper.example.com
+    - api.scraper.example.com
+    secretName: scraper-tls
+
+  rules:
+  # Main web interface
+  - host: scraper.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: scraper-api-service
+            port:
+              number: 80
+
+  # API endpoint
+  - host: api.scraper.example.com
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: scraper-api-service
+            port:
+              number: 80
+
+      # Health check endpoint (no auth required)
+      - path: /api/v1/system/health
+        pathType: Exact
+        backend:
+          service:
+            name: scraper-api-service
+            port:
+              number: 80
+
+---
+# Certificate for TLS
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: scraper-tls
+  namespace: scraper
+spec:
+  secretName: scraper-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+  - scraper.example.com
+  - api.scraper.example.com
+  - "*.scraper.example.com"

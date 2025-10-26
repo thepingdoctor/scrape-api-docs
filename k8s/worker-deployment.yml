@@ -1,0 +1,208 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scraper-worker
+  namespace: scraper
+  labels:
+    app: scraper-worker
+    version: v2.0.0
+    tier: worker
+spec:
+  replicas: 5
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: scraper-worker
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: scraper-worker
+        version: v2.0.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: scraper-worker
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      containers:
+      - name: worker
+        image: ghcr.io/thepingdoctor/scrape-api-docs:latest
+        imagePullPolicy: IfNotPresent
+        command: ["celery", "-A", "app.worker", "worker"]
+        args:
+        - "--loglevel=info"
+        - "--concurrency=4"
+        - "--max-tasks-per-child=1000"
+        - "--max-memory-per-child=800000"
+
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: WORKER_CONCURRENCY
+          value: "4"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: scraper-secrets
+              key: database-url
+        - name: REDIS_URL
+          value: "redis://redis-service:6379/0"
+        - name: S3_BUCKET
+          value: "scraper-exports"
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: scraper-secrets
+              key: aws-access-key-id
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: scraper-secrets
+              key: aws-secret-access-key
+
+        resources:
+          requests:
+            cpu: "1000m"
+            memory: "2Gi"
+          limits:
+            cpu: "4000m"
+            memory: "8Gi"
+
+        livenessProbe:
+          exec:
+            command:
+            - celery
+            - -A
+            - app.worker
+            - inspect
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+
+        volumeMounts:
+        - name: cache
+          mountPath: /cache
+        - name: tmp
+          mountPath: /tmp
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+
+      volumes:
+      - name: cache
+        emptyDir:
+          sizeLimit: 20Gi
+      - name: tmp
+        emptyDir:
+          sizeLimit: 2Gi
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - scraper-worker
+              topologyKey: kubernetes.io/hostname
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: workload-type
+                operator: In
+                values:
+                - worker
+
+      tolerations:
+      - key: "workload-type"
+        operator: "Equal"
+        value: "worker"
+        effect: "NoSchedule"
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: scraper-worker-hpa
+  namespace: scraper
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: scraper-worker
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 75
+  # Queue depth-based scaling (requires custom metrics)
+  - type: External
+    external:
+      metric:
+        name: redis_queue_depth
+      target:
+        type: AverageValue
+        averageValue: "10"
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+      - type: Percent
+        value: 25
+        periodSeconds: 120
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+      - type: Pods
+        value: 4
+        periodSeconds: 60
+      selectPolicy: Max
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: scraper-worker-pdb
+  namespace: scraper
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: scraper-worker

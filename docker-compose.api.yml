@@ -1,0 +1,58 @@
+# Docker Compose Configuration for Documentation Scraper API
+# ===========================================================
+
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: scrape-api-docs:latest
+    container_name: scrape-api-docs-api
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount data directories for persistence
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./exports:/app/exports
+    environment:
+      # API Configuration
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - API_WORKERS=4
+      - LOG_LEVEL=info
+
+      # Database
+      - DATABASE_PATH=/app/data/scraper_jobs.db
+
+      # Storage
+      - STORAGE_DIR=/app/exports
+
+      # Security (change in production!)
+      - SECRET_KEY=change-this-in-production
+      - API_KEY_SALT=change-this-too
+
+      # Rate Limiting
+      - RATE_LIMIT_PER_MINUTE=60
+      - RATE_LIMIT_BURST=120
+
+      # Scraping Defaults
+      - DEFAULT_RATE_LIMIT=2.0
+      - DEFAULT_TIMEOUT=30
+      - DEFAULT_CACHE_TTL=3600
+
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - scraper-network
+
+networks:
+  scraper-network:
+    driver: bridge

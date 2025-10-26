@@ -1,0 +1,186 @@
+# Enhanced Documentation Scraper Configuration
+# =============================================
+
+# Rate Limiting Configuration
+rate_limiting:
+  # Global default rate (requests per second)
+  default_rate: 2.0
+
+  # Burst size (max concurrent requests)
+  burst_size: 6
+
+  # Maximum retry attempts
+  max_retries: 3
+
+  # Exponential backoff factor
+  backoff_factor: 2.0
+
+  # Per-domain custom limits
+  domain_limits:
+    # Slower rate for APIs
+    api.example.com: 0.5
+    slow-docs.example.com: 1.0
+
+    # Faster rate for internal docs
+    internal-docs.company.com: 5.0
+
+# Caching Configuration
+caching:
+  # Enable/disable caching
+  enabled: true
+
+  # Cache directory
+  cache_dir: .cache
+
+  # Memory cache settings
+  memory:
+    # Max items in memory cache
+    max_size: 100
+
+  # Disk cache settings
+  disk:
+    # Default time-to-live (seconds)
+    default_ttl: 3600  # 1 hour
+
+    # Enable content deduplication
+    deduplicate: true
+
+    # Auto-cleanup interval (seconds)
+    cleanup_interval: 3600
+
+  # Per-domain TTL overrides
+  domain_ttls:
+    # Shorter TTL for frequently updated docs
+    api.example.com: 1800  # 30 minutes
+
+    # Longer TTL for stable documentation
+    archive.example.com: 86400  # 24 hours
+
+# Authentication Configuration
+authentication:
+  # Enable/disable authentication
+  enabled: false
+
+  # Credential storage file
+  credential_file: ~/.scraper_auth.json
+
+  # Domain-specific auth configurations
+  # (Credentials stored separately for security)
+  domains:
+    api.example.com:
+      auth_type: bearer
+      # token set via environment variable or credential file
+
+    docs.example.com:
+      auth_type: basic
+      # username/password set via credential file
+
+    secure-api.example.com:
+      auth_type: api_key
+      key_name: X-API-Key
+      location: header
+
+# Scraper Configuration
+scraper:
+  # Request timeout (seconds)
+  timeout: 10
+
+  # User agent string
+  user_agent: "Mozilla/5.0 (compatible; DocumentationScraper/1.0)"
+
+  # Maximum pages to scrape (0 = unlimited)
+  max_pages: 0
+
+  # Content extraction selectors (in priority order)
+  content_selectors:
+    - main
+    - article
+    - .main-content
+    - .documentation
+    - "#content"
+
+  # Elements to exclude from extraction
+  exclude_selectors:
+    - nav
+    - header
+    - footer
+    - .sidebar
+    - .navigation
+    - .breadcrumb
+
+  # Follow external links
+  follow_external: false
+
+  # Respect robots.txt
+  respect_robots: true
+
+# Output Configuration
+output:
+  # Default output directory
+  output_dir: ./output
+
+  # Filename generation pattern
+  # Available variables: {domain}, {path}, {timestamp}
+  filename_pattern: "{domain}_{path}_documentation.md"
+
+  # Markdown generation options
+  markdown:
+    # Heading style (ATX or SETEXT)
+    heading_style: ATX
+
+    # Bullet character
+    bullets: "*"
+
+    # Include source URLs
+    include_urls: true
+
+    # Include metadata
+    include_metadata: true
+
+# Logging Configuration
+logging:
+  # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  level: INFO
+
+  # Log file
+  file: scraper.log
+
+  # Log format
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+  # Enable console output
+  console: true
+
+# Performance Configuration
+performance:
+  # Enable parallel processing (experimental)
+  parallel: false
+
+  # Number of worker threads
+  workers: 4
+
+  # Connection pool size
+  pool_size: 10
+
+  # Enable HTTP/2
+  http2: false
+
+# Monitoring Configuration
+monitoring:
+  # Enable statistics collection
+  enabled: true
+
+  # Statistics output file
+  stats_file: scraper_stats.json
+
+  # Export metrics format (json, csv)
+  export_format: json
+
+  # Metrics to collect
+  metrics:
+    - pages_discovered
+    - pages_processed
+    - cache_hit_rate
+    - error_rate
+    - average_response_time
+    - total_duration

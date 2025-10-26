@@ -1,0 +1,86 @@
+# Default Configuration for API Documentation Scraper
+# ===================================================
+
+# Scraper settings
+scraper:
+  # Maximum number of pages to crawl
+  max_pages: 100
+
+  # Request timeout in seconds
+  timeout: 10
+
+  # User-Agent string for HTTP requests
+  user_agent: "scrape-api-docs/0.1.0"
+
+  # Maximum content size in bytes (100MB)
+  max_content_size: 104857600
+
+  # Politeness delay between requests (seconds)
+  politeness_delay: 1.0
+
+# Rate limiting configuration
+rate_limiting:
+  # Enable rate limiting
+  enabled: true
+
+  # Maximum requests per second per domain
+  requests_per_second: 2.0
+
+  # Burst size (max concurrent requests)
+  burst_size: 4
+
+  # Maximum retry attempts for rate-limited requests
+  max_retries: 3
+
+  # Exponential backoff factor
+  backoff_factor: 2.0
+
+# Robots.txt compliance
+robots:
+  # Enable robots.txt checking
+  enabled: true
+
+  # Respect crawl-delay directive
+  respect_crawl_delay: true
+
+  # User-Agent for robots.txt checks
+  user_agent: "scrape-api-docs/0.1.0"
+
+# Security settings
+security:
+  # Enable URL validation
+  validate_urls: true
+
+  # Block private IP addresses (SSRF protection)
+  block_private_ips: true
+
+  # Sanitize output filenames
+  sanitize_filenames: true
+
+# Logging configuration
+logging:
+  # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  level: INFO
+
+  # Log file path (null for console only)
+  file: null
+
+  # Use JSON formatting for logs
+  json_format: false
+
+  # Maximum log file size in bytes (10MB)
+  max_bytes: 10485760
+
+  # Number of backup log files to keep
+  backup_count: 5
+
+# Output settings
+output:
+  # Output directory for scraped documentation
+  directory: "."
+
+  # Output format (markdown, html, json)
+  format: markdown
+
+  # Output file encoding
+  encoding: utf-8

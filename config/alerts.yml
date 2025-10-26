@@ -1,0 +1,328 @@
+# Prometheus Alert Rules for Documentation Scraper
+
+groups:
+  # ========================================
+  # Application Health Alerts
+  # ========================================
+  - name: application_health
+    interval: 30s
+    rules:
+    - alert: HighErrorRate
+      expr: |
+        rate(scraper_jobs_total{status="failed"}[5m]) > 0.1
+      for: 5m
+      labels:
+        severity: warning
+        component: scraper
+      annotations:
+        summary: "High job failure rate detected"
+        description: "Job failure rate is {{ $value | humanizePercentage }} over the last 5 minutes"
+
+    - alert: CriticalErrorRate
+      expr: |
+        rate(scraper_jobs_total{status="failed"}[5m]) > 0.5
+      for: 2m
+      labels:
+        severity: critical
+        component: scraper
+      annotations:
+        summary: "Critical job failure rate"
+        description: "Job failure rate is {{ $value | humanizePercentage }} - immediate action required"
+
+    - alert: APIHighLatency
+      expr: |
+        histogram_quantile(0.95,
+          rate(scraper_request_duration_seconds_bucket[5m])
+        ) > 5
+      for: 5m
+      labels:
+        severity: warning
+        component: api
+      annotations:
+        summary: "API high latency detected"
+        description: "API p95 latency is {{ $value }}s (threshold: 5s)"
+
+    - alert: APIDown
+      expr: |
+        up{job="scraper-api"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        component: api
+      annotations:
+        summary: "API is down"
+        description: "Scraper API has been down for more than 1 minute"
+
+  # ========================================
+  # Worker Queue Alerts
+  # ========================================
+  - name: worker_queue
+    interval: 30s
+    rules:
+    - alert: WorkerQueueBacklog
+      expr: |
+        scraper_worker_queue_depth > 100
+      for: 10m
+      labels:
+        severity: warning
+        component: worker
+      annotations:
+        summary: "Worker queue backlog growing"
+        description: "Queue depth is {{ $value }} items (threshold: 100)"
+
+    - alert: WorkerQueueCritical
+      expr: |
+        scraper_worker_queue_depth > 500
+      for: 5m
+      labels:
+        severity: critical
+        component: worker
+      annotations:
+        summary: "Critical worker queue backlog"
+        description: "Queue depth is {{ $value }} items - scaling may be required"
+
+    - alert: NoActiveWorkers
+      expr: |
+        sum(up{job="scraper-worker"}) == 0
+      for: 2m
+      labels:
+        severity: critical
+        component: worker
+      annotations:
+        summary: "No active workers available"
+        description: "All worker pods are down or unreachable"
+
+    - alert: LowWorkerCount
+      expr: |
+        sum(up{job="scraper-worker"}) < 2
+      for: 5m
+      labels:
+        severity: warning
+        component: worker
+      annotations:
+        summary: "Low worker count"
+        description: "Only {{ $value }} workers available (minimum: 2)"
+
+  # ========================================
+  # Resource Utilization Alerts
+  # ========================================
+  - name: resource_utilization
+    interval: 60s
+    rules:
+    - alert: HighCPUUsage
+      expr: |
+        rate(container_cpu_usage_seconds_total{namespace="scraper"}[5m]) > 0.8
+      for: 10m
+      labels:
+        severity: warning
+        component: infrastructure
+      annotations:
+        summary: "High CPU usage detected"
+        description: "CPU usage is {{ $value | humanizePercentage }} for {{ $labels.pod }}"
+
+    - alert: HighMemoryUsage
+      expr: |
+        container_memory_usage_bytes{namespace="scraper"} /
+        container_spec_memory_limit_bytes{namespace="scraper"} > 0.9
+      for: 5m
+      labels:
+        severity: warning
+        component: infrastructure
+      annotations:
+        summary: "High memory usage detected"
+        description: "Memory usage is {{ $value | humanizePercentage }} for {{ $labels.pod }}"
+
+    - alert: PodOOMKilled
+      expr: |
+        increase(kube_pod_container_status_terminated_reason{
+          namespace="scraper",
+          reason="OOMKilled"
+        }[5m]) > 0
+      labels:
+        severity: critical
+        component: infrastructure
+      annotations:
+        summary: "Pod killed due to OOM"
+        description: "Pod {{ $labels.pod }} was OOM killed"
+
+  # ========================================
+  # Database Alerts
+  # ========================================
+  - name: database
+    interval: 30s
+    rules:
+    - alert: DatabaseConnectionsHigh
+      expr: |
+        pg_stat_database_numbackends / pg_settings_max_connections > 0.8
+      for: 5m
+      labels:
+        severity: warning
+        component: database
+      annotations:
+        summary: "High database connection usage"
+        description: "Database connection pool is {{ $value | humanizePercentage }} full"
+
+    - alert: DatabaseConnectionsExhausted
+      expr: |
+        pg_stat_database_numbackends / pg_settings_max_connections > 0.95
+      for: 2m
+      labels:
+        severity: critical
+        component: database
+      annotations:
+        summary: "Database connections near limit"
+        description: "Database connection pool is {{ $value | humanizePercentage }} full - immediate action required"
+
+    - alert: DatabaseDown
+      expr: |
+        up{job="postgresql"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        component: database
+      annotations:
+        summary: "PostgreSQL database is down"
+        description: "Cannot connect to PostgreSQL database"
+
+    - alert: DatabaseSlowQueries
+      expr: |
+        rate(pg_stat_statements_mean_exec_time_seconds[5m]) > 1
+      for: 10m
+      labels:
+        severity: warning
+        component: database
+      annotations:
+        summary: "Slow database queries detected"
+        description: "Average query execution time is {{ $value }}s"
+
+  # ========================================
+  # Cache Alerts
+  # ========================================
+  - name: cache
+    interval: 30s
+    rules:
+    - alert: RedisDown
+      expr: |
+        up{job="redis"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        component: cache
+      annotations:
+        summary: "Redis is down"
+        description: "Redis cache is unreachable"
+
+    - alert: RedisCacheHitRateLow
+      expr: |
+        scraper_cache_hit_rate < 0.5
+      for: 10m
+      labels:
+        severity: warning
+        component: cache
+      annotations:
+        summary: "Low Redis cache hit rate"
+        description: "Cache hit rate is {{ $value | humanizePercentage }} (threshold: 50%)"
+
+    - alert: RedisMemoryHigh
+      expr: |
+        redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+      for: 5m
+      labels:
+        severity: warning
+        component: cache
+      annotations:
+        summary: "Redis memory usage high"
+        description: "Redis memory usage is {{ $value | humanizePercentage }}"
+
+    - alert: RedisEvictions
+      expr: |
+        increase(redis_evicted_keys_total[5m]) > 100
+      for: 5m
+      labels:
+        severity: warning
+        component: cache
+      annotations:
+        summary: "High Redis key evictions"
+        description: "{{ $value }} keys evicted in last 5 minutes"
+
+  # ========================================
+  # Kubernetes Alerts
+  # ========================================
+  - name: kubernetes
+    interval: 60s
+    rules:
+    - alert: PodCrashLooping
+      expr: |
+        rate(kube_pod_container_status_restarts_total{namespace="scraper"}[15m]) > 0
+      for: 5m
+      labels:
+        severity: critical
+        component: kubernetes
+      annotations:
+        summary: "Pod is crash looping"
+        description: "Pod {{ $labels.pod }} is restarting frequently"
+
+    - alert: PodNotReady
+      expr: |
+        sum by (namespace, pod) (
+          kube_pod_status_phase{namespace="scraper", phase!~"Running|Succeeded"}
+        ) > 0
+      for: 10m
+      labels:
+        severity: warning
+        component: kubernetes
+      annotations:
+        summary: "Pod not ready"
+        description: "Pod {{ $labels.pod }} has been in non-ready state for 10 minutes"
+
+    - alert: DeploymentReplicasMismatch
+      expr: |
+        kube_deployment_spec_replicas{namespace="scraper"} !=
+        kube_deployment_status_replicas_available{namespace="scraper"}
+      for: 10m
+      labels:
+        severity: warning
+        component: kubernetes
+      annotations:
+        summary: "Deployment replica mismatch"
+        description: "Deployment {{ $labels.deployment }} has replica mismatch"
+
+    - alert: HPAMaxedOut
+      expr: |
+        kube_horizontalpodautoscaler_status_current_replicas{namespace="scraper"} ==
+        kube_horizontalpodautoscaler_spec_max_replicas{namespace="scraper"}
+      for: 15m
+      labels:
+        severity: warning
+        component: kubernetes
+      annotations:
+        summary: "HPA at maximum replicas"
+        description: "HPA {{ $labels.horizontalpodautoscaler }} has been at max replicas for 15 minutes"
+
+  # ========================================
+  # Security Alerts
+  # ========================================
+  - name: security
+    interval: 60s
+    rules:
+    - alert: UnauthorizedAccessAttempts
+      expr: |
+        rate(scraper_auth_failures_total[5m]) > 10
+      for: 5m
+      labels:
+        severity: warning
+        component: security
+      annotations:
+        summary: "High rate of unauthorized access attempts"
+        description: "{{ $value }} failed auth attempts per second"
+
+    - alert: RateLimitExceeded
+      expr: |
+        rate(scraper_rate_limit_exceeded_total[5m]) > 5
+      for: 5m
+      labels:
+        severity: warning
+        component: security
+      annotations:
+        summary: "Rate limit frequently exceeded"
+        description: "Rate limit exceeded {{ $value }} times per second"

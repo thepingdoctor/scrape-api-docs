@@ -1,0 +1,180 @@
+version: '3.8'
+
+services:
+  # ========================================
+  # CLI Application
+  # ========================================
+  scraper-cli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: scraper-cli
+    volumes:
+      - ./output:/data
+      - ./cache:/cache
+    environment:
+      - SCRAPER_OUTPUT_DIR=/data
+      - SCRAPER_CACHE_DIR=/cache
+      - PYTHONUNBUFFERED=1
+    command: ["https://docs.example.com"]
+    networks:
+      - scraper-network
+
+  # ========================================
+  # Web UI (Streamlit)
+  # ========================================
+  scraper-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: scraper-ui
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./output:/data
+      - ./cache:/cache
+    environment:
+      - SCRAPER_OUTPUT_DIR=/data
+      - SCRAPER_CACHE_DIR=/cache
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+    command: ["streamlit", "run", "/app/src/scrape_api_docs/streamlit_app.py"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - scraper-network
+    restart: unless-stopped
+
+  # ========================================
+  # Redis Cache (Optional - for future API)
+  # ========================================
+  redis:
+    image: redis:7-alpine
+    container_name: scraper-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - scraper-network
+    restart: unless-stopped
+
+  # ========================================
+  # PostgreSQL Database (Optional - for future API)
+  # ========================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: scraper-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=scraper
+      - POSTGRES_USER=scraper
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme123}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scraper"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - scraper-network
+    restart: unless-stopped
+
+  # ========================================
+  # Nginx Reverse Proxy (Optional)
+  # ========================================
+  nginx:
+    image: nginx:alpine
+    container_name: scraper-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/certs:/etc/nginx/certs:ro
+      - ./output:/usr/share/nginx/html/downloads:ro
+    depends_on:
+      - scraper-ui
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - scraper-network
+    restart: unless-stopped
+
+  # ========================================
+  # Prometheus Monitoring (Optional)
+  # ========================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: scraper-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+    networks:
+      - scraper-network
+    restart: unless-stopped
+
+  # ========================================
+  # Grafana Dashboards (Optional)
+  # ========================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: scraper-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./config/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      - prometheus
+    networks:
+      - scraper-network
+    restart: unless-stopped
+
+networks:
+  scraper-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  redis-data:
+    driver: local
+  postgres-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
