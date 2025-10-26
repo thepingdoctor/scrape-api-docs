@@ -146,6 +146,27 @@ Thumbs.db
 # Project specific
 *_documentation.md
 
+# Internal development documents (not for public repo)
+CLAUDE.md
+API_DELIVERABLES.md
+ASYNC_IMPLEMENTATION_COMPLETE.md
+docs/ACTION_PLAN.md
+docs/HIVE_MIND_FINAL_REPORT.md
+docs/REVIEW_REPORT.md
+docs/FINAL_REVIEW.md
+docs/EXECUTIVE_PRESENTATION.md
+docs/testing-strategy.md
+docs/testing-summary.md
+docs/test-suite-summary.md
+docs/features/COMPLETION_REPORT.md
+docs/features/DOCUMENTATION_INDEX.md
+docs/features/EXECUTIVE_SUMMARY.md
+docs/features/FEATURE_ROADMAP.md
+docs/optimization/implementation-roadmap.md
+docs/optimization/priority-matrix.md
+docs/optimization/quick-wins.md
+docs/optimization/OPTIMIZATION_SUMMARY.md
+
 # Claude Code & Claude Flow generated files
 # Claude Code configuration and runtime files
 .claude/
