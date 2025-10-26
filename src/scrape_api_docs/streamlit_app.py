@@ -8,7 +8,7 @@ from datetime import datetime
 from urllib.parse import urlparse
 import os
 from typing import List, Dict, Optional, Tuple
-from .scraper import (
+from scrape_api_docs.scraper import (
     get_all_site_links,
     extract_main_content,
     convert_html_to_markdown,
