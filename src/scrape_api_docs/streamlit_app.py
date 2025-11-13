@@ -15,6 +15,7 @@ from scrape_api_docs.scraper import (
     generate_filename_from_url,
 )
 from scrape_api_docs.user_agents import UserAgents, get_user_agent
+from scrape_api_docs.config import Config
 import requests
 from bs4 import BeautifulSoup
 import re
@@ -80,6 +81,10 @@ def scrape_with_progress(
     max_pages: Optional[int] = None,
     custom_filename: Optional[str] = None,
     user_agent: Optional[str] = None,
+    respect_robots: bool = True,
+    enable_rate_limiting: bool = True,
+    requests_per_second: float = 2.0,
+    politeness_delay: float = 1.0,
 ):
     """
     Scrape a documentation site with progress tracking.
@@ -91,6 +96,10 @@ def scrape_with_progress(
         max_pages: Optional maximum number of pages to scrape.
         custom_filename: Optional custom output filename.
         user_agent: User agent string or identifier to use.
+        respect_robots: Whether to respect robots.txt rules.
+        enable_rate_limiting: Whether to enable rate limiting.
+        requests_per_second: Number of requests per second.
+        politeness_delay: Delay between requests in seconds.
     """
     state.is_running = True
     state.start_time = datetime.now()
@@ -99,9 +108,21 @@ def scrape_with_progress(
     state.processed_urls = []
 
     try:
+        # Create custom config with user settings
+        config = Config.load()
+        config.set('scraper.timeout', timeout)
+        config.set('robots.enabled', respect_robots)
+        config.set('rate_limiting.enabled', enable_rate_limiting)
+        config.set('rate_limiting.requests_per_second', requests_per_second)
+        config.set('scraper.politeness_delay', politeness_delay)
+        
         # Step 1: Discover all pages
         state.status_message = "Discovering pages..."
-        state.discovered_urls = get_all_site_links(base_url, user_agent=user_agent)
+        state.discovered_urls = get_all_site_links(
+            base_url, 
+            user_agent=user_agent,
+            config=config
+        )
 
         if max_pages and len(state.discovered_urls) > max_pages:
             state.discovered_urls = state.discovered_urls[:max_pages]
@@ -270,6 +291,63 @@ def render_input_section():
                 placeholder="Mozilla/5.0 ...",
                 help="Enter a custom user agent string"
             )
+        
+        # Robots.txt Compliance
+        st.subheader("🤖 Robots.txt Compliance")
+        
+        respect_robots = st.checkbox(
+            "Respect robots.txt rules",
+            value=True,
+            help="When enabled, the scraper will check and follow robots.txt directives"
+        )
+        
+        if not respect_robots:
+            st.warning(
+                "⚠️ **Warning**: Only disable robots.txt compliance if you have explicit "
+                "permission from the site owner. Ignoring robots.txt may violate the site's "
+                "terms of service and could result in your IP being blocked.",
+                icon="⚠️"
+            )
+        
+        # Rate Limiting Controls
+        st.subheader("🚦 Rate Limiting")
+        
+        enable_rate_limiting = st.checkbox(
+            "Enable rate limiting",
+            value=True,
+            help="Limit the number of requests per second to avoid overwhelming the server"
+        )
+        
+        if enable_rate_limiting:
+            col_rate1, col_rate2 = st.columns(2)
+            
+            with col_rate1:
+                requests_per_second = st.slider(
+                    "Requests per second",
+                    min_value=0.5,
+                    max_value=10.0,
+                    value=2.0,
+                    step=0.5,
+                    help="Number of requests allowed per second. Lower = more polite, slower scraping"
+                )
+            
+            with col_rate2:
+                politeness_delay = st.slider(
+                    "Politeness delay (seconds)",
+                    min_value=0.0,
+                    max_value=5.0,
+                    value=1.0,
+                    step=0.1,
+                    help="Additional delay between requests in seconds"
+                )
+        else:
+            requests_per_second = 10.0  # High value when disabled
+            politeness_delay = 0.0
+            st.warning(
+                "⚠️ **Warning**: Disabling rate limiting may cause the server to block your requests. "
+                "Use with caution and only on sites you have permission to scrape.",
+                icon="⚠️"
+            )
 
     # Handle start button click
     if start_button:
@@ -303,6 +381,10 @@ def render_input_section():
                     max_pages if max_pages > 0 else None,
                     custom_filename if custom_filename else None,
                     selected_ua,
+                    respect_robots,
+                    enable_rate_limiting,
+                    requests_per_second,
+                    politeness_delay,
                 ),
                 daemon=True,
             )
