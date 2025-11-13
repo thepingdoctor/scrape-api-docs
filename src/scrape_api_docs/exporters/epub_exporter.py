@@ -3,17 +3,21 @@
 import time
 import logging
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, TYPE_CHECKING
 from datetime import datetime
 from bs4 import BeautifulSoup
 
 from .base import ExportConverter, ExportOptions, ExportResult, PageResult
+
+if TYPE_CHECKING:
+    from ebooklib import epub
 
 try:
     from ebooklib import epub
     EBOOKLIB_AVAILABLE = True
 except ImportError:
     EBOOKLIB_AVAILABLE = False
+    epub = None  # type: ignore
 
 try:
     import markdown
