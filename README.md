@@ -145,10 +145,21 @@ scrape-docs-ui
 
 Features:
 - 📝 URL input with real-time validation
-- ⚙️ Advanced configuration (timeout, max pages, output format)
+- ⚙️ Advanced configuration (timeout, max pages, custom filename)
+- 📦 **Multiple export formats**: Markdown, PDF, EPUB, HTML, JSON
 - 📊 Real-time progress tracking with visual feedback
 - 📄 Results preview and downloadable output
+- 💾 Direct file download from browser (files saved to `tmp/` directory)
 - 🎨 Modern, user-friendly interface
+
+**Export Formats:**
+- **Markdown** (default) - Clean, consolidated documentation
+- **PDF** - Professional documents via WeasyPrint
+- **EPUB** - E-book format for offline reading
+- **HTML** - Standalone HTML with embedded styles
+- **JSON** - Structured data for programmatic access
+
+**Note:** Scraped files are temporarily stored in the `tmp/` directory (git-ignored) and can be downloaded directly from the browser interface. PDF and EPUB formats require additional dependencies: `pip install scrape-api-docs[all-formats]`
 
 **For detailed UI guide, see [STREAMLIT_UI_GUIDE.md](STREAMLIT_UI_GUIDE.md)**
 

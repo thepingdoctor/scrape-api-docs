@@ -7,6 +7,8 @@ import pandas as pd
 from datetime import datetime
 from urllib.parse import urlparse
 import os
+import asyncio
+from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 from scrape_api_docs.scraper import (
     get_all_site_links,
@@ -16,6 +18,8 @@ from scrape_api_docs.scraper import (
 )
 from scrape_api_docs.user_agents import UserAgents, get_user_agent
 from scrape_api_docs.config import Config
+from scrape_api_docs.exporters.base import PageResult, ExportOptions
+from scrape_api_docs.exporters.orchestrator import ExportOrchestrator
 import requests
 from bs4 import BeautifulSoup
 import re
@@ -38,6 +42,9 @@ class ScraperState:
         self.status_message = "Ready to start scraping"
         self.output_filename = ""
         self.scraping_complete = False
+        self.page_results: List[PageResult] = []
+        self.export_results: Dict[str, Dict] = {}
+        self.selected_formats: List[str] = ["markdown"]
 
 
 def init_session_state():
@@ -85,6 +92,7 @@ def scrape_with_progress(
     enable_rate_limiting: bool = True,
     requests_per_second: float = 2.0,
     politeness_delay: float = 1.0,
+    selected_formats: List[str] = None,
 ):
     """
     Scrape a documentation site with progress tracking.
@@ -167,6 +175,14 @@ def scrape_with_progress(
                     full_documentation += markdown_content
                     full_documentation += "\n\n---\n\n"
 
+                    # Store as PageResult for export
+                    page_result = PageResult(
+                        url=url,
+                        title=page_title,
+                        content=markdown_content,
+                        format='markdown'
+                    )
+                    state.page_results.append(page_result)
                     state.processed_urls.append(url)
                 else:
                     state.errors.append({"url": url, "error": "No main content found"})
@@ -176,14 +192,76 @@ def scrape_with_progress(
 
             time.sleep(0.1)  # Small delay to allow UI updates
 
-        # Step 4: Save the file
+        # Step 4: Save the file and generate exports
         if state.is_running:
             state.content = full_documentation
-            output_filename = custom_filename or generate_filename_from_url(base_url)
-            state.output_filename = output_filename
-
-            with open(output_filename, "w", encoding="utf-8") as f:
+            
+            # Generate base filename
+            base_filename = custom_filename or generate_filename_from_url(base_url)
+            if base_filename.endswith('.md'):
+                base_filename = base_filename[:-3]
+            
+            # Ensure tmp directory exists
+            tmp_dir = "tmp"
+            os.makedirs(tmp_dir, exist_ok=True)
+            
+            # Save markdown file
+            markdown_filepath = os.path.join(tmp_dir, f"{base_filename}.md")
+            with open(markdown_filepath, "w", encoding="utf-8") as f:
                 f.write(full_documentation)
+            
+            state.output_filename = f"{base_filename}.md"
+            state.selected_formats = selected_formats or ["markdown"]
+            
+            # Generate additional export formats if requested
+            if selected_formats and len(selected_formats) > 1 or (selected_formats and "markdown" not in selected_formats):
+                state.status_message = "Generating export formats..."
+                
+                # Create export options
+                export_options = ExportOptions(
+                    title=main_title or urlparse(base_url).netloc,
+                    source_url=base_url,
+                    include_metadata=True,
+                    include_toc=True
+                )
+                
+                # Initialize orchestrator
+                orchestrator = ExportOrchestrator()
+                
+                # Generate exports asynchronously
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                try:
+                    export_results = loop.run_until_complete(
+                        orchestrator.generate_exports(
+                            pages=state.page_results,
+                            base_url=base_url,
+                            formats=[f for f in selected_formats if f != "markdown"],
+                            output_dir=Path(tmp_dir),
+                            options={fmt: export_options for fmt in selected_formats}
+                        )
+                    )
+                    
+                    # Store export results
+                    for fmt, result in export_results.items():
+                        if result.success:
+                            state.export_results[fmt] = {
+                                'path': str(result.output_path),
+                                'size': result.size_bytes,
+                                'success': True
+                            }
+                        else:
+                            state.export_results[fmt] = {
+                                'success': False,
+                                'error': result.error
+                            }
+                            state.errors.append({
+                                "url": "Export",
+                                "error": f"{fmt.upper()} export failed: {result.error}"
+                            })
+                finally:
+                    loop.close()
 
             state.status_message = "Scraping completed successfully!"
             state.scraping_complete = True
@@ -262,6 +340,53 @@ def render_input_section():
                 "Custom Output Filename (optional)",
                 placeholder="my_documentation.md",
                 help="Leave empty to auto-generate filename",
+            )
+        
+        # Export Format Selection
+        st.subheader("📦 Export Formats")
+        
+        # Check available formats
+        orchestrator = ExportOrchestrator()
+        available_formats = orchestrator.list_available_formats()
+        
+        format_options = {
+            "markdown": "📝 Markdown - Clean, consolidated documentation",
+            "pdf": "📄 PDF - Professional documents (requires WeasyPrint)",
+            "epub": "📖 EPUB - E-book format for offline reading (requires ebooklib)",
+            "html": "🌐 HTML - Standalone HTML with embedded styles",
+            "json": "📊 JSON - Structured data for programmatic access"
+        }
+        
+        # Build format list with availability indicators
+        format_labels = []
+        for fmt in ["markdown", "pdf", "epub", "html", "json"]:
+            label = format_options[fmt]
+            if fmt not in available_formats and fmt != "markdown":
+                label += " ⚠️ (Not installed)"
+            format_labels.append(label)
+        
+        selected_format_labels = st.multiselect(
+            "Select export formats",
+            options=format_labels,
+            default=[format_labels[0]],  # Default to Markdown
+            help="Choose one or more output formats. Markdown is always available."
+        )
+        
+        # Map labels back to format names
+        selected_formats = []
+        for label in selected_format_labels:
+            for fmt, desc in format_options.items():
+                if label.startswith(desc.split(" -")[0]):
+                    selected_formats.append(fmt)
+                    break
+        
+        # Show warning if unavailable formats selected
+        unavailable_selected = [f for f in selected_formats if f not in available_formats and f != "markdown"]
+        if unavailable_selected:
+            st.warning(
+                f"⚠️ The following formats require additional dependencies: {', '.join(unavailable_selected)}. "
+                "Install with: `pip install scrape-api-docs[all-formats]`",
+                icon="⚠️"
             )
         
         # User Agent Selection
@@ -385,6 +510,7 @@ def render_input_section():
                     enable_rate_limiting,
                     requests_per_second,
                     politeness_delay,
+                    selected_formats,
                 ),
                 daemon=True,
             )
@@ -506,17 +632,64 @@ def render_results_section():
             else:
                 st.success("No errors encountered! 🎉")
 
-        # Download button
+        # Download buttons for all formats
         if st.session_state.output_filename and state.content:
             st.divider()
-            st.download_button(
-                label="⬇️ Download Markdown File",
-                data=state.content,
-                file_name=st.session_state.output_filename,
-                mime="text/markdown",
-                use_container_width=True,
-                type="primary",
-            )
+            st.subheader("📥 Download Files")
+            
+            # Format icons and MIME types
+            format_info = {
+                "markdown": {"icon": "📝", "mime": "text/markdown"},
+                "pdf": {"icon": "📄", "mime": "application/pdf"},
+                "epub": {"icon": "📖", "mime": "application/epub+zip"},
+                "html": {"icon": "🌐", "mime": "text/html"},
+                "json": {"icon": "📊", "mime": "application/json"}
+            }
+            
+            # Show download buttons based on selected formats
+            num_formats = len(state.selected_formats)
+            cols = st.columns(min(num_formats, 3))
+            
+            for idx, fmt in enumerate(state.selected_formats):
+                col_idx = idx % 3
+                with cols[col_idx]:
+                    if fmt == "markdown":
+                        # Markdown is always available from state.content
+                        st.download_button(
+                            label=f"{format_info[fmt]['icon']} Download {fmt.upper()}",
+                            data=state.content,
+                            file_name=state.output_filename,
+                            mime=format_info[fmt]['mime'],
+                            use_container_width=True,
+                            type="primary" if fmt == "markdown" else "secondary"
+                        )
+                    elif fmt in state.export_results:
+                        result = state.export_results[fmt]
+                        if result['success']:
+                            # Read the exported file
+                            try:
+                                with open(result['path'], 'rb') as f:
+                                    file_data = f.read()
+                                
+                                # Get filename from path
+                                filename = os.path.basename(result['path'])
+                                
+                                # Show file size
+                                size_mb = result['size'] / (1024 * 1024)
+                                size_str = f"{size_mb:.2f} MB" if size_mb >= 1 else f"{result['size'] / 1024:.2f} KB"
+                                
+                                st.download_button(
+                                    label=f"{format_info[fmt]['icon']} Download {fmt.upper()} ({size_str})",
+                                    data=file_data,
+                                    file_name=filename,
+                                    mime=format_info[fmt]['mime'],
+                                    use_container_width=True,
+                                    type="secondary"
+                                )
+                            except Exception as e:
+                                st.error(f"Error loading {fmt.upper()} file: {str(e)}")
+                        else:
+                            st.error(f"{fmt.upper()} export failed: {result.get('error', 'Unknown error')}")
 
 
 def render_sidebar():
@@ -526,14 +699,14 @@ def render_sidebar():
         st.markdown(
             """
             This tool crawls documentation websites and converts them into 
-            a single Markdown file.
+            multiple formats for easy reading and sharing.
             
             **Features:**
             - 🔍 Automatic page discovery
-            - 📝 HTML to Markdown conversion
+            - 📝 Multiple export formats (Markdown, PDF, EPUB, HTML, JSON)
             - ⚡ Real-time progress tracking
             - 📊 Detailed error reporting
-            - 💾 Downloadable output
+            - 💾 Direct browser downloads
             """
         )
 
