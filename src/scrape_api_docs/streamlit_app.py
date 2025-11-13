@@ -101,7 +101,7 @@ def scrape_with_progress(
     try:
         # Step 1: Discover all pages
         state.status_message = "Discovering pages..."
-        state.discovered_urls = get_all_site_links(base_url)
+        state.discovered_urls = get_all_site_links(base_url, user_agent=user_agent)
 
         if max_pages and len(state.discovered_urls) > max_pages:
             state.discovered_urls = state.discovered_urls[:max_pages]
