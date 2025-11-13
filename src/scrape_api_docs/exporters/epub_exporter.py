@@ -140,7 +140,7 @@ class EPUBExportConverter(ExportConverter):
         self,
         page: PageResult,
         idx: int
-    ) -> epub.EpubHtml:
+    ) -> "epub.EpubHtml":
         """Create EPUB chapter from page."""
         chapter = epub.EpubHtml(
             title=page.title,
@@ -177,7 +177,7 @@ class EPUBExportConverter(ExportConverter):
 
         return chapter
 
-    def _get_epub_css(self) -> epub.EpubItem:
+    def _get_epub_css(self) -> "epub.EpubItem":
         """Get CSS for EPUB."""
         style = '''
 body {
@@ -298,7 +298,7 @@ li {
 
     def _generate_toc(
         self,
-        chapters: List[epub.EpubHtml],
+        chapters: List["epub.EpubHtml"],
         pages: List[PageResult]
     ) -> List:
         """Generate table of contents."""
