@@ -145,6 +145,7 @@ Thumbs.db
 
 # Project specific
 *_documentation.md
+tmp/
 
 # Internal development documents (not for public repo)
 CLAUDE.md
