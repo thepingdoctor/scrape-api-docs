@@ -75,9 +75,23 @@ def get_all_site_links(
     if config is None:
         config = Config.load()
 
+    # Determine user agent to use FIRST (before RobotsChecker)
+    if user_agent:
+        # Try to resolve as identifier first, fall back to using as-is
+        try:
+            ua_string = get_user_agent(user_agent)
+        except ValueError:
+            # Not a predefined identifier, use as custom string
+            ua_string = user_agent
+    else:
+        # Use from config or default
+        ua_string = config.get('scraper.user_agent', UserAgents.CHROME_WINDOWS)
+    
+    logger.info(f"Using User-Agent: {ua_string[:80]}..." if len(ua_string) > 80 else f"Using User-Agent: {ua_string}")
+
     if robots_checker is None:
         robots_checker = RobotsChecker(
-            user_agent=config.get('robots.user_agent', 'scrape-api-docs/0.1.0')
+            user_agent=ua_string
         )
 
     if rate_limiter is None:
@@ -109,20 +123,6 @@ def get_all_site_links(
         logger.info(f"Recommended crawl delay: {crawl_delay}s")
     else:
         crawl_delay = config.get('scraper.politeness_delay', 1.0)
-
-    # Determine user agent to use
-    if user_agent:
-        # Try to resolve as identifier first, fall back to using as-is
-        try:
-            ua_string = get_user_agent(user_agent)
-        except ValueError:
-            # Not a predefined identifier, use as custom string
-            ua_string = user_agent
-    else:
-        # Use from config or default
-        ua_string = config.get('scraper.user_agent', UserAgents.CHROME_WINDOWS)
-    
-    logger.info(f"Using User-Agent: {ua_string[:80]}..." if len(ua_string) > 80 else f"Using User-Agent: {ua_string}")
 
     # Initialize crawling
     to_visit = deque([base_url])
