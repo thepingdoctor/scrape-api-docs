@@ -33,6 +33,7 @@ from .exceptions import (
     RetryableException
 )
 from .config import Config
+from .user_agents import get_user_agent, UserAgents
 
 logger = get_logger(__name__)
 
@@ -42,7 +43,8 @@ def get_all_site_links(
     max_pages: int = 100,
     config: Optional[Config] = None,
     robots_checker: Optional[RobotsChecker] = None,
-    rate_limiter: Optional[RateLimiter] = None
+    rate_limiter: Optional[RateLimiter] = None,
+    user_agent: Optional[str] = None
 ) -> List[str]:
     """
     Crawls a website starting from the base URL to find all unique, internal pages.
@@ -60,6 +62,7 @@ def get_all_site_links(
         config: Configuration instance (optional)
         robots_checker: RobotsChecker instance (optional, created if not provided)
         rate_limiter: RateLimiter instance (optional, created if not provided)
+        user_agent: User agent string or identifier (optional)
 
     Returns:
         A sorted list of unique absolute URLs belonging to the site
@@ -107,6 +110,20 @@ def get_all_site_links(
     else:
         crawl_delay = config.get('scraper.politeness_delay', 1.0)
 
+    # Determine user agent to use
+    if user_agent:
+        # Try to resolve as identifier first, fall back to using as-is
+        try:
+            ua_string = get_user_agent(user_agent)
+        except ValueError:
+            # Not a predefined identifier, use as custom string
+            ua_string = user_agent
+    else:
+        # Use from config or default
+        ua_string = config.get('scraper.user_agent', UserAgents.CHROME_WINDOWS)
+    
+    logger.info(f"Using User-Agent: {ua_string[:80]}..." if len(ua_string) > 80 else f"Using User-Agent: {ua_string}")
+
     # Initialize crawling
     to_visit = deque([base_url])
     visited = {base_url}
@@ -116,6 +133,7 @@ def get_all_site_links(
     base_path = urlparse(base_url).path
 
     session = requests.Session()
+    session.headers.update({'User-Agent': ua_string})
     timeout = config.get('scraper.timeout', 10)
 
     logger.info(f"Starting crawl of {base_url} (max {max_pages} pages)")
@@ -294,7 +312,8 @@ def scrape_site(
     base_url: str,
     max_pages: int = 100,
     output_dir: str = '.',
-    config: Optional[Config] = None
+    config: Optional[Config] = None,
+    user_agent: Optional[str] = None
 ) -> str:
     """
     Scrapes an entire documentation site, combines all content, and saves it
@@ -343,8 +362,18 @@ def scrape_site(
             max_pages=max_pages,
             config=config,
             robots_checker=robots_checker,
-            rate_limiter=rate_limiter
+            rate_limiter=rate_limiter,
+            user_agent=user_agent
         )
+
+        # Determine user agent for content processing
+        if user_agent:
+            try:
+                ua_string = get_user_agent(user_agent)
+            except ValueError:
+                ua_string = user_agent
+        else:
+            ua_string = config.get('scraper.user_agent', UserAgents.CHROME_WINDOWS)
 
         # Initialize documentation content
         full_documentation = ""
@@ -358,6 +387,7 @@ def scrape_site(
 
         # Process each page
         session = requests.Session()
+        session.headers.update({'User-Agent': ua_string})
         pages_processed = 0
         pages_failed = 0
 

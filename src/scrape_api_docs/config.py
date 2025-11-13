@@ -40,7 +40,7 @@ class Config:
         'scraper': {
             'max_pages': 100,
             'timeout': 10,
-            'user_agent': 'scrape-api-docs/0.1.0',
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'max_content_size': 100 * 1024 * 1024,  # 100MB
             'politeness_delay': 1.0,
         },

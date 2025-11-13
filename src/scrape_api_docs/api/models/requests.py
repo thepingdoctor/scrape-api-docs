@@ -8,6 +8,7 @@ Pydantic models for validating incoming requests.
 from pydantic import BaseModel, HttpUrl, Field, validator
 from typing import List, Optional, Dict
 from enum import Enum
+from scrape_api_docs.user_agents import validate_user_agent, UserAgents
 
 
 class AuthType(str, Enum):
@@ -71,7 +72,7 @@ class ScrapeOptions(BaseModel):
     )
     user_agent: Optional[str] = Field(
         default=None,
-        description="Custom User-Agent header"
+        description="Custom User-Agent header (use predefined identifier like 'chrome_windows' or custom string)"
     )
     follow_redirects: bool = Field(
         default=True,
@@ -81,6 +82,16 @@ class ScrapeOptions(BaseModel):
         default=True,
         description="Verify SSL certificates"
     )
+
+    @validator('user_agent')
+    def validate_user_agent(cls, v):
+        """Validate user agent string if provided."""
+        if v is not None and not validate_user_agent(v):
+            raise ValueError(
+                "Invalid user agent string. Must be 3-2000 characters "
+                "and not contain newlines or null bytes."
+            )
+        return v
 
     class Config:
         schema_extra = {
@@ -92,7 +103,8 @@ class ScrapeOptions(BaseModel):
                 "rate_limit": 2.0,
                 "timeout": 30,
                 "cache_enabled": True,
-                "cache_ttl": 3600
+                "cache_ttl": 3600,
+                "user_agent": "chrome_windows"
             }
         }
 

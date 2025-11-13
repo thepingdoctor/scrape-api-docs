@@ -14,6 +14,7 @@ from scrape_api_docs.scraper import (
     convert_html_to_markdown,
     generate_filename_from_url,
 )
+from scrape_api_docs.user_agents import UserAgents, get_user_agent
 import requests
 from bs4 import BeautifulSoup
 import re
@@ -78,6 +79,7 @@ def scrape_with_progress(
     timeout: int = 10,
     max_pages: Optional[int] = None,
     custom_filename: Optional[str] = None,
+    user_agent: Optional[str] = None,
 ):
     """
     Scrape a documentation site with progress tracking.
@@ -88,6 +90,7 @@ def scrape_with_progress(
         timeout: Request timeout in seconds.
         max_pages: Optional maximum number of pages to scrape.
         custom_filename: Optional custom output filename.
+        user_agent: User agent string or identifier to use.
     """
     state.is_running = True
     state.start_time = datetime.now()
@@ -239,6 +242,34 @@ def render_input_section():
                 placeholder="my_documentation.md",
                 help="Leave empty to auto-generate filename",
             )
+        
+        # User Agent Selection
+        st.subheader("🌐 User Agent")
+        
+        # Get all user agents organized by category
+        all_user_agents = UserAgents.get_all()
+        display_names = UserAgents.get_display_names()
+        
+        # Create options list with categories
+        ua_options = ["Chrome (Windows) - Default"] + [
+            display_names[key] for key in sorted(all_user_agents.keys())
+        ] + ["Custom..."]
+        
+        user_agent_selection = st.selectbox(
+            "Select User Agent",
+            options=ua_options,
+            index=0,
+            help="Choose which browser/device to identify as when scraping"
+        )
+        
+        # Handle custom user agent input
+        custom_user_agent = None
+        if user_agent_selection == "Custom...":
+            custom_user_agent = st.text_input(
+                "Custom User Agent String",
+                placeholder="Mozilla/5.0 ...",
+                help="Enter a custom user agent string"
+            )
 
     # Handle start button click
     if start_button:
@@ -247,6 +278,18 @@ def render_input_section():
         if not is_valid:
             st.error(f"❌ {error_msg}")
         else:
+            # Determine user agent to use
+            selected_ua = None
+            if user_agent_selection == "Custom...":
+                if custom_user_agent:
+                    selected_ua = custom_user_agent
+            elif user_agent_selection != "Chrome (Windows) - Default":
+                # Find the identifier for the selected display name
+                for identifier, metadata in all_user_agents.items():
+                    if metadata['name'] == user_agent_selection:
+                        selected_ua = identifier
+                        break
+            
             st.session_state.scraping_complete = False
             st.session_state.scraper_state = ScraperState()
 
@@ -259,6 +302,7 @@ def render_input_section():
                     timeout,
                     max_pages if max_pages > 0 else None,
                     custom_filename if custom_filename else None,
+                    selected_ua,
                 ),
                 daemon=True,
             )
