@@ -34,6 +34,8 @@ class ScraperState:
         self.start_time = None
         self.end_time = None
         self.status_message = "Ready to start scraping"
+        self.output_filename = ""
+        self.scraping_complete = False
 
 
 def init_session_state():
@@ -71,6 +73,7 @@ def validate_url(url: str) -> Tuple[bool, str]:
 
 
 def scrape_with_progress(
+    state: ScraperState,
     base_url: str,
     timeout: int = 10,
     max_pages: Optional[int] = None,
@@ -80,12 +83,12 @@ def scrape_with_progress(
     Scrape a documentation site with progress tracking.
 
     Args:
+        state: The ScraperState object to update.
         base_url: The base URL to scrape.
         timeout: Request timeout in seconds.
         max_pages: Optional maximum number of pages to scrape.
         custom_filename: Optional custom output filename.
     """
-    state = st.session_state.scraper_state
     state.is_running = True
     state.start_time = datetime.now()
     state.status_message = "Starting scrape..."
@@ -153,13 +156,13 @@ def scrape_with_progress(
         if state.is_running:
             state.content = full_documentation
             output_filename = custom_filename or generate_filename_from_url(base_url)
-            st.session_state.output_filename = output_filename
+            state.output_filename = output_filename
 
             with open(output_filename, "w", encoding="utf-8") as f:
                 f.write(full_documentation)
 
             state.status_message = "Scraping completed successfully!"
-            st.session_state.scraping_complete = True
+            state.scraping_complete = True
         else:
             state.status_message = "Scraping cancelled"
 
@@ -170,7 +173,7 @@ def scrape_with_progress(
     finally:
         state.end_time = datetime.now()
         state.is_running = False
-        state.progress = 100 if st.session_state.scraping_complete else state.progress
+        state.progress = 100 if state.scraping_complete else state.progress
 
 
 def render_header():
@@ -251,6 +254,7 @@ def render_input_section():
             thread = threading.Thread(
                 target=scrape_with_progress,
                 args=(
+                    st.session_state.scraper_state,
                     url,
                     timeout,
                     max_pages if max_pages > 0 else None,

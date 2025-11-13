@@ -170,7 +170,7 @@ class SecurityValidator:
         Sanitize filename to prevent path traversal and other attacks.
 
         Removes:
-        - Path separators (/, \)
+        - Path separators (/, \\)
         - Parent directory references (..)
         - Special/dangerous characters
         - Limits length to 200 characters
