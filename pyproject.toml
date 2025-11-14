@@ -1,13 +1,13 @@
 [tool.poetry]
 name = "scrape-api-docs"
-version = "0.1.0"
-description = "A Python tool to crawl and scrape documentation websites, converting their content into a single, consolidated Markdown file"
+version = "0.2.0"
+description = "A Python tool to scrape documentation from websites and GitHub repositories, converting content into consolidated Markdown, PDF, EPUB, HTML, or JSON formats"
 authors = ["Adam Blackington"]
 license = "MIT"
 readme = "README.md"
 homepage = "https://github.com/thepingdoctor/scrape-api-docs"
 repository = "https://github.com/thepingdoctor/scrape-api-docs"
-keywords = ["documentation", "scraper", "markdown", "crawler", "web-scraping"]
+keywords = ["documentation", "scraper", "markdown", "crawler", "web-scraping", "github", "github-scraper", "api-docs", "repository-docs"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",

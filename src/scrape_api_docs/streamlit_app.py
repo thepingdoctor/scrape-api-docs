@@ -16,6 +16,11 @@ from scrape_api_docs.scraper import (
     convert_html_to_markdown,
     generate_filename_from_url,
 )
+from scrape_api_docs.github_scraper import (
+    is_github_url,
+    parse_github_url,
+    scrape_github_repo as scrape_github_repo_impl
+)
 from scrape_api_docs.user_agents import UserAgents, get_user_agent
 from scrape_api_docs.config import Config
 from scrape_api_docs.exporters.base import PageResult, ExportOptions
@@ -93,21 +98,28 @@ def scrape_with_progress(
     requests_per_second: float = 2.0,
     politeness_delay: float = 1.0,
     selected_formats: List[str] = None,
+    github_token: Optional[str] = None,
+    max_files_github: int = 100,
+    include_metadata: bool = True,
 ):
     """
-    Scrape a documentation site with progress tracking.
+    Scrape a documentation site with progress tracking (supports web and GitHub URLs).
 
     Args:
         state: The ScraperState object to update.
-        base_url: The base URL to scrape.
+        base_url: The base URL to scrape (web or GitHub).
         timeout: Request timeout in seconds.
-        max_pages: Optional maximum number of pages to scrape.
+        max_pages: Optional maximum number of pages to scrape (web only).
         custom_filename: Optional custom output filename.
-        user_agent: User agent string or identifier to use.
-        respect_robots: Whether to respect robots.txt rules.
+        user_agent: User agent string or identifier to use (web only).
+        respect_robots: Whether to respect robots.txt rules (web only).
         enable_rate_limiting: Whether to enable rate limiting.
-        requests_per_second: Number of requests per second.
+        requests_per_second: Number of requests per second (web only).
         politeness_delay: Delay between requests in seconds.
+        selected_formats: List of export formats to generate.
+        github_token: GitHub personal access token (GitHub only).
+        max_files_github: Maximum files to scrape from GitHub repo.
+        include_metadata: Include file metadata in GitHub scrape.
     """
     state.is_running = True
     state.start_time = datetime.now()
@@ -116,157 +128,218 @@ def scrape_with_progress(
     state.processed_urls = []
 
     try:
-        # Create custom config with user settings
-        config = Config.load()
-        config.set('scraper.timeout', timeout)
-        config.set('robots.enabled', respect_robots)
-        config.set('rate_limiting.enabled', enable_rate_limiting)
-        config.set('rate_limiting.requests_per_second', requests_per_second)
-        config.set('scraper.politeness_delay', politeness_delay)
-        
-        # Step 1: Discover all pages
-        state.status_message = "Discovering pages..."
-        state.discovered_urls = get_all_site_links(
-            base_url, 
-            user_agent=user_agent,
-            config=config
-        )
+        # Check if this is a GitHub URL
+        is_github = is_github_url(base_url)
 
-        if max_pages and len(state.discovered_urls) > max_pages:
-            state.discovered_urls = state.discovered_urls[:max_pages]
+        if is_github:
+            # GitHub scraping workflow
+            state.status_message = "Scraping GitHub repository..."
 
-        state.total_pages = len(state.discovered_urls)
+            # Create custom config
+            config = Config.load()
+            if github_token:
+                config.set('github.token', github_token)
 
-        # Step 2: Build the documentation
-        full_documentation = ""
-        main_title = " ".join(
-            part.capitalize() for part in urlparse(base_url).path.strip("/").split("/")
-        )
-        full_documentation += f"# Documentation for {main_title or urlparse(base_url).netloc}\n"
-        full_documentation += f"**Source:** {base_url}\n"
-        full_documentation += f"**Scraped on:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-
-        # Step 3: Process each page
-        for idx, url in enumerate(state.discovered_urls):
-            if not state.is_running:  # Check if user stopped scraping
-                state.status_message = "Scraping stopped by user"
-                break
-
-            state.current_url = url
-            state.progress = ((idx + 1) / state.total_pages) * 100
-            state.status_message = f"Processing page {idx + 1}/{state.total_pages}"
-
+            # Call GitHub scraper
             try:
-                response = requests.get(url, timeout=timeout)
-                response.raise_for_status()
-                page_html = response.text
+                # Use the actual GitHub scraper implementation
+                output_path = scrape_github_repo_impl(
+                    url=base_url,
+                    output_dir="tmp",
+                    max_files=max_files_github,
+                    config=config
+                )
 
-                soup = BeautifulSoup(page_html, "html.parser")
-                page_title = soup.title.string if soup.title else url
-                page_title = re.sub(r"\|.*$| - .*$", "", page_title).strip()
+                # Read the generated file
+                with open(output_path, 'r', encoding='utf-8') as f:
+                    full_documentation = f.read()
 
-                main_content_html = extract_main_content(page_html)
+                # Parse GitHub URL for metadata
+                github_info = parse_github_url(base_url)
+                main_title = f"{github_info['owner']}/{github_info['repo']}"
+                if github_info['path']:
+                    main_title += f" - {github_info['path']}"
 
-                if main_content_html:
-                    markdown_content = convert_html_to_markdown(main_content_html)
+                # Update state
+                state.content = full_documentation
+                state.total_pages = max_files_github  # Approximate
+                state.processed_urls = [base_url]
+                state.discovered_urls = [base_url]
 
-                    full_documentation += f"## {page_title}\n\n"
-                    full_documentation += f"**Original Page:** `{url}`\n\n"
-                    full_documentation += markdown_content
-                    full_documentation += "\n\n---\n\n"
+                # Generate base filename
+                base_filename = custom_filename or f"{github_info['owner']}_{github_info['repo']}_documentation"
+                if base_filename.endswith('.md'):
+                    base_filename = base_filename[:-3]
 
-                    # Store as PageResult for export
-                    page_result = PageResult(
-                        url=url,
-                        title=page_title,
-                        content=markdown_content,
-                        format='markdown'
-                    )
-                    state.page_results.append(page_result)
-                    state.processed_urls.append(url)
-                else:
-                    state.errors.append({"url": url, "error": "No main content found"})
+                # Save markdown file
+                tmp_dir = "tmp"
+                os.makedirs(tmp_dir, exist_ok=True)
+                markdown_filepath = os.path.join(tmp_dir, f"{base_filename}.md")
+                with open(markdown_filepath, "w", encoding="utf-8") as f:
+                    f.write(full_documentation)
+
+                state.output_filename = f"{base_filename}.md"
+                state.selected_formats = selected_formats or ["markdown"]
+                state.status_message = "GitHub scraping completed successfully!"
+                state.scraping_complete = True
 
             except Exception as e:
-                state.errors.append({"url": url, "error": str(e)})
-
-            time.sleep(0.1)  # Small delay to allow UI updates
-
-        # Step 4: Save the file and generate exports
-        if state.is_running:
-            state.content = full_documentation
-            
-            # Generate base filename
-            base_filename = custom_filename or generate_filename_from_url(base_url)
-            if base_filename.endswith('.md'):
-                base_filename = base_filename[:-3]
-            
-            # Ensure tmp directory exists
-            tmp_dir = "tmp"
-            os.makedirs(tmp_dir, exist_ok=True)
-            
-            # Save markdown file
-            markdown_filepath = os.path.join(tmp_dir, f"{base_filename}.md")
-            with open(markdown_filepath, "w", encoding="utf-8") as f:
-                f.write(full_documentation)
-            
-            state.output_filename = f"{base_filename}.md"
-            state.selected_formats = selected_formats or ["markdown"]
-            
-            # Generate additional export formats if requested
-            if selected_formats and len(selected_formats) > 1 or (selected_formats and "markdown" not in selected_formats):
-                state.status_message = "Generating export formats..."
-                
-                # Create export options
-                export_options = ExportOptions(
-                    title=main_title or urlparse(base_url).netloc,
-                    source_url=base_url,
-                    include_metadata=True,
-                    include_toc=True
-                )
-                
-                # Initialize orchestrator
-                orchestrator = ExportOrchestrator()
-                
-                # Generate exports asynchronously
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                
-                try:
-                    export_results = loop.run_until_complete(
-                        orchestrator.generate_exports(
-                            pages=state.page_results,
-                            base_url=base_url,
-                            formats=[f for f in selected_formats if f != "markdown"],
-                            output_dir=Path(tmp_dir),
-                            options={fmt: export_options for fmt in selected_formats}
-                        )
-                    )
-                    
-                    # Store export results
-                    for fmt, result in export_results.items():
-                        if result.success:
-                            state.export_results[fmt] = {
-                                'path': str(result.output_path),
-                                'size': result.size_bytes,
-                                'success': True
-                            }
-                        else:
-                            state.export_results[fmt] = {
-                                'success': False,
-                                'error': result.error
-                            }
-                            state.errors.append({
-                                "url": "Export",
-                                "error": f"{fmt.upper()} export failed: {result.error}"
-                            })
-                finally:
-                    loop.close()
-
-            state.status_message = "Scraping completed successfully!"
-            state.scraping_complete = True
+                state.errors.append({"url": base_url, "error": f"GitHub scraping failed: {str(e)}"})
+                state.status_message = f"Error: {str(e)}"
+                return
         else:
-            state.status_message = "Scraping cancelled"
+            # Web scraping workflow (existing code)
+            # Create custom config with user settings
+            config = Config.load()
+            config.set('scraper.timeout', timeout)
+            config.set('robots.enabled', respect_robots)
+            config.set('rate_limiting.enabled', enable_rate_limiting)
+            config.set('rate_limiting.requests_per_second', requests_per_second)
+            config.set('scraper.politeness_delay', politeness_delay)
+
+            # Step 1: Discover all pages
+            state.status_message = "Discovering pages..."
+            state.discovered_urls = get_all_site_links(
+                base_url,
+                user_agent=user_agent,
+                config=config
+            )
+
+            if max_pages and len(state.discovered_urls) > max_pages:
+                state.discovered_urls = state.discovered_urls[:max_pages]
+
+            state.total_pages = len(state.discovered_urls)
+
+            # Step 2: Build the documentation
+            full_documentation = ""
+            main_title = " ".join(
+                part.capitalize() for part in urlparse(base_url).path.strip("/").split("/")
+            )
+            full_documentation += f"# Documentation for {main_title or urlparse(base_url).netloc}\n"
+            full_documentation += f"**Source:** {base_url}\n"
+            full_documentation += f"**Scraped on:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+
+            # Step 3: Process each page
+            for idx, url in enumerate(state.discovered_urls):
+                if not state.is_running:  # Check if user stopped scraping
+                    state.status_message = "Scraping stopped by user"
+                    break
+
+                state.current_url = url
+                state.progress = ((idx + 1) / state.total_pages) * 100
+                state.status_message = f"Processing page {idx + 1}/{state.total_pages}"
+
+                try:
+                    response = requests.get(url, timeout=timeout)
+                    response.raise_for_status()
+                    page_html = response.text
+
+                    soup = BeautifulSoup(page_html, "html.parser")
+                    page_title = soup.title.string if soup.title else url
+                    page_title = re.sub(r"\|.*$| - .*$", "", page_title).strip()
+
+                    main_content_html = extract_main_content(page_html)
+
+                    if main_content_html:
+                        markdown_content = convert_html_to_markdown(main_content_html)
+
+                        full_documentation += f"## {page_title}\n\n"
+                        full_documentation += f"**Original Page:** `{url}`\n\n"
+                        full_documentation += markdown_content
+                        full_documentation += "\n\n---\n\n"
+
+                        # Store as PageResult for export
+                        page_result = PageResult(
+                            url=url,
+                            title=page_title,
+                            content=markdown_content,
+                            format='markdown'
+                        )
+                        state.page_results.append(page_result)
+                        state.processed_urls.append(url)
+                    else:
+                        state.errors.append({"url": url, "error": "No main content found"})
+
+                except Exception as e:
+                    state.errors.append({"url": url, "error": str(e)})
+
+                time.sleep(0.1)  # Small delay to allow UI updates
+
+            # Step 4: Save the file and generate exports
+            if state.is_running:
+                state.content = full_documentation
+
+                # Generate base filename
+                base_filename = custom_filename or generate_filename_from_url(base_url)
+                if base_filename.endswith('.md'):
+                    base_filename = base_filename[:-3]
+
+                # Ensure tmp directory exists
+                tmp_dir = "tmp"
+                os.makedirs(tmp_dir, exist_ok=True)
+
+                # Save markdown file
+                markdown_filepath = os.path.join(tmp_dir, f"{base_filename}.md")
+                with open(markdown_filepath, "w", encoding="utf-8") as f:
+                    f.write(full_documentation)
+
+                state.output_filename = f"{base_filename}.md"
+                state.selected_formats = selected_formats or ["markdown"]
+
+                # Generate additional export formats if requested
+                if selected_formats and len(selected_formats) > 1 or (selected_formats and "markdown" not in selected_formats):
+                    state.status_message = "Generating export formats..."
+
+                    # Create export options
+                    export_options = ExportOptions(
+                        title=main_title or urlparse(base_url).netloc,
+                        source_url=base_url,
+                        include_metadata=True,
+                        include_toc=True
+                    )
+
+                    # Initialize orchestrator
+                    orchestrator = ExportOrchestrator()
+
+                    # Generate exports asynchronously
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+
+                    try:
+                        export_results = loop.run_until_complete(
+                            orchestrator.generate_exports(
+                                pages=state.page_results,
+                                base_url=base_url,
+                                formats=[f for f in selected_formats if f != "markdown"],
+                                output_dir=Path(tmp_dir),
+                                options={fmt: export_options for fmt in selected_formats}
+                            )
+                        )
+
+                        # Store export results
+                        for fmt, result in export_results.items():
+                            if result.success:
+                                state.export_results[fmt] = {
+                                    'path': str(result.output_path),
+                                    'size': result.size_bytes,
+                                    'success': True
+                                }
+                            else:
+                                state.export_results[fmt] = {
+                                    'success': False,
+                                    'error': result.error
+                                }
+                                state.errors.append({
+                                    "url": "Export",
+                                    "error": f"{fmt.upper()} export failed: {result.error}"
+                                })
+                    finally:
+                        loop.close()
+
+                state.status_message = "Scraping completed successfully!"
+                state.scraping_complete = True
+            else:
+                state.status_message = "Scraping cancelled"
 
     except Exception as e:
         state.status_message = f"Error during scraping: {str(e)}"
@@ -298,11 +371,25 @@ def render_input_section():
 
     with col1:
         url = st.text_input(
-            "Documentation URL",
-            placeholder="https://example.com/docs/",
-            help="Enter the starting URL of the documentation to scrape",
+            "Documentation URL (Web or GitHub)",
+            placeholder="https://example.com/docs/ or https://github.com/owner/repo/tree/main/docs",
+            help="Enter a website URL or GitHub repository URL to scrape documentation",
             key="url_input",
         )
+
+        # Auto-detect GitHub URLs and show metadata
+        if url and is_github_url(url):
+            try:
+                github_info = parse_github_url(url)
+                st.info(
+                    f"🔍 **GitHub Repository Detected**\n\n"
+                    f"• Owner: `{github_info['owner']}`\n\n"
+                    f"• Repo: `{github_info['repo']}`\n\n"
+                    f"• Branch: `{github_info['branch']}`\n\n"
+                    f"• Path: `{github_info['path'] or '(root)'}`"
+                )
+            except Exception:
+                pass  # Invalid GitHub URL format
 
     with col2:
         st.write("")  # Spacing
@@ -341,6 +428,38 @@ def render_input_section():
                 placeholder="my_documentation.md",
                 help="Leave empty to auto-generate filename",
             )
+
+        # GitHub-specific options (only show if GitHub URL detected)
+        if url and is_github_url(url):
+            st.subheader("🐙 GitHub Options")
+
+            github_token = st.text_input(
+                "GitHub Personal Access Token (optional)",
+                type="password",
+                help="Increase rate limit from 60 to 5,000 requests/hour. Required for private repositories.",
+                placeholder="ghp_xxxxxxxxxxxx"
+            )
+
+            if github_token:
+                st.success("✅ Token provided - Higher rate limits enabled (5,000 req/hr)")
+            else:
+                st.warning("⚠️ No token - Limited to 60 requests/hour for public repos")
+
+            col_gh1, col_gh2 = st.columns(2)
+            with col_gh1:
+                max_files_github = st.number_input(
+                    "Max files to scrape",
+                    min_value=1,
+                    max_value=1000,
+                    value=100,
+                    help="Limit files to prevent rate limiting on large repos"
+                )
+            with col_gh2:
+                include_metadata = st.checkbox(
+                    "Include file metadata",
+                    value=True,
+                    help="Include commit info, authors, last modified dates"
+                )
         
         # Export Format Selection
         st.subheader("📦 Export Formats")
@@ -496,6 +615,16 @@ def render_input_section():
             st.session_state.scraping_complete = False
             st.session_state.scraper_state = ScraperState()
 
+            # Prepare GitHub-specific parameters
+            gh_token = None
+            gh_max_files = 100
+            gh_include_metadata = True
+
+            if is_github_url(url):
+                gh_token = locals().get('github_token')
+                gh_max_files = locals().get('max_files_github', 100)
+                gh_include_metadata = locals().get('include_metadata', True)
+
             # Start scraping in a background thread
             thread = threading.Thread(
                 target=scrape_with_progress,
@@ -511,6 +640,9 @@ def render_input_section():
                     requests_per_second,
                     politeness_delay,
                     selected_formats,
+                    gh_token,
+                    gh_max_files,
+                    gh_include_metadata,
                 ),
                 daemon=True,
             )

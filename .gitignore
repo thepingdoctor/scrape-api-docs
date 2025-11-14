@@ -87,7 +87,7 @@ ipython_config.py
 Pipfile.lock
 
 # poetry
-poetry.lock
+# poetry.lock - keep this committed for reproducible builds
 
 # PEP 582
 __pypackages__/
@@ -168,7 +168,10 @@ docs/optimization/priority-matrix.md
 docs/optimization/quick-wins.md
 docs/optimization/OPTIMIZATION_SUMMARY.md
 
-# Claude Code & Claude Flow generated files
+# ============================================================================
+# CLAUDE CODE & CLAUDE FLOW - AI Development Tools
+# ============================================================================
+
 # Claude Code configuration and runtime files
 .claude/
 !.claude/settings.json
@@ -179,31 +182,58 @@ docs/optimization/OPTIMIZATION_SUMMARY.md
 .claude/helpers/
 .claude/skills/
 .claude/*.sh
+.claude/*.exe
+.claude/*.bat
 
-# Claude Flow configuration files
+# Claude Flow configuration
 .mcp.json
 claude-flow.config.json
+claude-flow
+claude-flow.exe
+claude-flow.bat
 
-# Claude Flow swarm and coordination directories
+# Claude Flow swarm coordination
 .swarm/
 .hive-mind/
 .claude-flow/
+
+# Memory and coordination data
 memory/
+!memory/.gitkeep
 coordination/
+!coordination/.gitkeep
+
+# Session and agent data
 memory/claude-flow-data.json
-memory/sessions/*
-!memory/sessions/README.md
-memory/agents/*
-!memory/agents/README.md
-coordination/memory_bank/*
-coordination/subtasks/*
-coordination/orchestration/*
+memory/sessions/
+memory/agents/
+coordination/memory_bank/
+coordination/subtasks/
+coordination/orchestration/
+
+# Database files
 *.db
 *.db-journal
 *.db-wal
+*.db-shm
 *.sqlite
 *.sqlite-journal
 *.sqlite-wal
-claude-flow
-# Removed Windows wrapper files per user request
+*.sqlite-shm
+
+# Hive mind artifacts
 hive-mind-prompt-*.txt
+hive-mind-*.json
+swarm-*.json
+agent-*.json
+
+# Build artifacts from Claude Flow
+dist-claude/
+build-claude/
+.claude-build/
+
+# Temporary AI-generated documentation (not for public repo)
+docs/AI_GENERATED_*.md
+docs/HIVE_MIND_*.md
+docs/SWARM_*.md
+docs/CLAUDE_*.md

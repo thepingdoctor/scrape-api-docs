@@ -35,6 +35,13 @@ from .scraper import (
     convert_html_to_markdown,
     generate_filename_from_url
 )
+from .github_scraper import (
+    scrape_github_repo,
+    is_github_url,
+    parse_github_url,
+    get_repo_tree,
+    get_file_content
+)
 
 # Async components (import may fail if dependencies not installed)
 try:
@@ -46,6 +53,12 @@ try:
     __all__ = [
         # Main API
         "scrape_site",
+        # GitHub scraping
+        "scrape_github_repo",
+        "is_github_url",
+        "parse_github_url",
+        "get_repo_tree",
+        "get_file_content",
         # Async components
         "AsyncDocumentationScraper",
         "AsyncHTTPClient",
@@ -66,6 +79,11 @@ except ImportError as e:
     # Async dependencies not installed, provide sync-only API
     __all__ = [
         "scrape_site",
+        "scrape_github_repo",
+        "is_github_url",
+        "parse_github_url",
+        "get_repo_tree",
+        "get_file_content",
         "get_all_site_links",
         "extract_main_content",
         "convert_html_to_markdown",

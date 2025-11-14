@@ -4,6 +4,14 @@ A high-performance, production-ready Python documentation scraper with async arc
 
 ## 🚀 Key Features
 
+### 🐙 GitHub Repository Scraping (NEW in v0.2.0)
+- **Direct repo scraping**: Scrape documentation from GitHub without cloning
+- **Folder-specific**: Target specific directories (e.g., `/docs`, `/wiki`)
+- **Auto-detection**: Automatically detects GitHub URLs in UI
+- **Rate limiting**: Handles GitHub API limits (60/hr unauth, 5,000/hr with token)
+- **Link conversion**: Converts relative links to absolute GitHub URLs
+- **Multiple formats**: HTTPS, SSH, tree, blob URL support
+
 ### ⚡ High-Performance Async Architecture (5-10x Faster)
 - **Async scraping**: 2.5 pages/sec (vs 0.5 sync)
 - **Connection pooling**: Reusable HTTP connections with DNS caching
