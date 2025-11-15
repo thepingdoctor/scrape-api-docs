@@ -756,7 +756,7 @@ def render_results_section():
                     state.total_pages,
                     len(state.processed_urls),
                     len(state.errors),
-                    st.session_state.output_filename,
+                    state.output_filename,
                     f"{((state.end_time or datetime.now()) - state.start_time).total_seconds():.1f}s"
                     if state.start_time
                     else "N/A",
@@ -799,7 +799,7 @@ def render_results_section():
                 st.success("No errors encountered! 🎉")
 
         # Download buttons for all formats
-        if st.session_state.output_filename and state.content:
+        if state.output_filename and state.content:
             st.divider()
             st.subheader("📥 Download Files")
             
