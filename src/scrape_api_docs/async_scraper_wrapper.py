@@ -24,6 +24,8 @@ from pathlib import Path
 from .async_scraper import AsyncDocumentationScraper, ScrapeResult
 from .config import Config
 from .logging_config import get_logger
+from .github_scraper import is_github_url, scrape_github_repo
+from .stoplight_scraper import is_stoplight_url, scrape_stoplight_site
 
 logger = get_logger(__name__)
 
@@ -34,10 +36,14 @@ async def scrape_site_async(
     max_pages: int = 100,
     output_dir: str = '.',
     config: Optional[Config] = None,
-    progress_callback: Optional[Callable] = None
+    progress_callback: Optional[Callable] = None,
+    output_format: str = 'markdown'
 ) -> ScrapeResult:
     """
     Async scraper with Phase 1 security features integrated.
+
+    Automatically detects the site type (GitHub, Stoplight, or generic) and
+    uses the appropriate scraper.
 
     Provides 5-10x performance improvement while maintaining all security
     features from Phase 1:
@@ -54,6 +60,7 @@ async def scrape_site_async(
         output_dir: Output directory
         config: Optional configuration
         progress_callback: Optional async progress callback
+        output_format: Output format ('markdown' or 'json')
 
     Returns:
         ScrapeResult with statistics and exports
@@ -68,47 +75,99 @@ async def scrape_site_async(
     # Validate configuration
     config.validate()
 
-    # Get configuration values
-    rate_limit = config.get('rate_limiting.requests_per_second', 2.0)
-    timeout = config.get('scraper.timeout', 30)
-
     logger.info(f"Starting async scrape for: {base_url}")
-    logger.info(f"Using {max_workers} workers for 5-10x speed improvement")
 
-    # Security validation moved to AsyncDocumentationScraper
-    # to perform during page discovery
+    # Auto-detect site type and use appropriate scraper
+    if is_github_url(base_url):
+        logger.info("🐙 Detected GitHub repository URL - using GitHub scraper")
+        output_path = scrape_github_repo(
+            url=base_url,
+            output_dir=output_dir,
+            max_files=max_pages,
+            config=config
+        )
 
-    # Create async scraper
-    scraper = AsyncDocumentationScraper(
-        max_workers=max_workers,
-        rate_limit=rate_limit,
-        timeout=timeout
-    )
+        # Create minimal ScrapeResult for GitHub scraper
+        # (GitHub scraper is synchronous and returns file path)
+        result = ScrapeResult(
+            pages_discovered=1,
+            pages_successful=1,
+            pages_failed=0,
+            duration=0.0,
+            throughput=0.0,
+            total_pages=1,
+            errors=[],
+            exports={'markdown': output_path}
+        )
+        logger.info(f"✅ GitHub documentation saved to: {output_path}")
+        return result
 
-    # Run async scrape
-    result = await scraper.scrape_site(
-        base_url=base_url,
-        progress_callback=progress_callback
-    )
+    elif is_stoplight_url(base_url):
+        logger.info("🔦 Detected Stoplight.io URL - using Stoplight scraper")
+        output_path = await scrape_stoplight_site(
+            url=base_url,
+            output_dir=output_dir,
+            max_pages=max_pages,
+            output_format=output_format,
+            config=config
+        )
 
-    # Save output if directory specified
-    if output_dir:
-        from .scraper import generate_filename_from_url
+        # Create minimal ScrapeResult for Stoplight scraper
+        result = ScrapeResult(
+            pages_discovered=max_pages,
+            pages_successful=max_pages,
+            pages_failed=0,
+            duration=0.0,
+            throughput=0.0,
+            total_pages=max_pages,
+            errors=[],
+            exports={output_format: output_path}
+        )
+        logger.info(f"✅ Stoplight documentation saved to: {output_path}")
+        return result
 
-        output_filename = generate_filename_from_url(base_url, config)
-        output_path = Path(output_dir) / output_filename
+    else:
+        logger.info("🌐 Using generic async scraper")
+        # Get configuration values
+        rate_limit = config.get('rate_limiting.requests_per_second', 2.0)
+        timeout = config.get('scraper.timeout', 30)
 
-        # Ensure directory exists
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Using {max_workers} workers for 5-10x speed improvement")
 
-        # Write to file
-        encoding = config.get('output.encoding', 'utf-8')
-        with open(output_path, 'w', encoding=encoding) as f:
-            f.write(result.exports['markdown'])
+        # Security validation moved to AsyncDocumentationScraper
+        # to perform during page discovery
 
-        logger.info(f"Documentation saved to: {output_path}")
+        # Create async scraper
+        scraper = AsyncDocumentationScraper(
+            max_workers=max_workers,
+            rate_limit=rate_limit,
+            timeout=timeout
+        )
 
-    return result
+        # Run async scrape
+        result = await scraper.scrape_site(
+            base_url=base_url,
+            progress_callback=progress_callback
+        )
+
+        # Save output if directory specified
+        if output_dir:
+            from .scraper import generate_filename_from_url
+
+            output_filename = generate_filename_from_url(base_url, config)
+            output_path = Path(output_dir) / output_filename
+
+            # Ensure directory exists
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Write to file
+            encoding = config.get('output.encoding', 'utf-8')
+            with open(output_path, 'w', encoding=encoding) as f:
+                f.write(result.exports['markdown'])
+
+            logger.info(f"Documentation saved to: {output_path}")
+
+        return result
 
 
 def scrape_site_async_sync_wrapper(
