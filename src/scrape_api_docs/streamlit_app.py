@@ -211,9 +211,11 @@ def scrape_with_progress(
                     f.write(full_documentation)
 
                 state.output_filename = f"{base_filename}.md"
+                st.session_state.output_filename = state.output_filename  # Sync to session state for download buttons
                 state.selected_formats = selected_formats or ["markdown"]
                 state.status_message = "GitHub scraping completed successfully!"
                 state.scraping_complete = True
+                st.session_state.scraping_complete = True  # Sync this too
 
             except Exception as e:
                 state.errors.append({"url": base_url, "error": f"GitHub scraping failed: {str(e)}"})
