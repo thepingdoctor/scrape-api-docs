@@ -541,8 +541,38 @@ def scrape_github_repo(
         ua_string = config.get('scraper.user_agent', UserAgents.CHROME_WINDOWS)
         session.headers.update({'User-Agent': ua_string})
 
+        # Verify whether the path is actually a file or directory
+        # by checking with the GitHub API (don't trust URL format alone)
+        actual_is_file = False
+        if base_path:
+            try:
+                # Try to get the path as a directory/file via contents API
+                api_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{base_path}?ref={branch}"
+                timeout = config.get('scraper.timeout', 10)
+                response = session.get(api_url, timeout=timeout)
+                
+                if response.status_code == 200:
+                    content_data = response.json()
+                    # If it's a file, response is a dict with 'type': 'file'
+                    # If it's a directory, response is a list of items
+                    if isinstance(content_data, dict) and content_data.get('type') == 'file':
+                        actual_is_file = True
+                        logger.info(f"Verified path is a file: {base_path}")
+                    else:
+                        logger.info(f"Verified path is a directory: {base_path}")
+                else:
+                    # If we can't verify, fall back to URL-based detection
+                    logger.warning(f"Could not verify path type, using URL-based detection")
+                    actual_is_file = is_file
+            except Exception as e:
+                logger.warning(f"Error verifying path type: {e}, using URL-based detection")
+                actual_is_file = is_file
+        else:
+            # Root directory
+            actual_is_file = False
+
         # Handle single file vs directory
-        if is_file:
+        if actual_is_file:
             # Single file mode
             logger.info(f"Scraping single file: {base_path}")
             files_to_process = [{'path': base_path, 'type': 'blob'}]
