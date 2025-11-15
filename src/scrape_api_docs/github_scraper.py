@@ -472,7 +472,8 @@ def scrape_github_repo(
     url: str,
     output_dir: str = '.',
     max_files: int = 100,
-    config: Optional[Config] = None
+    config: Optional[Config] = None,
+    progress_callback: Optional[callable] = None
 ) -> str:
     """
     Main function to scrape GitHub repository documentation.
@@ -615,12 +616,32 @@ def scrape_github_repo(
         full_documentation += f"**Branch:** {branch}\n"
         full_documentation += f"**Scraped:** {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}\n\n"
 
+        # Notify about total files discovered
+        total_files = len(files_to_process)
+        if progress_callback:
+            progress_callback({
+                'status': 'discovered',
+                'total_files': total_files,
+                'files_to_process': [item['path'] for item in files_to_process]
+            })
+
         # Process each file
         files_processed = 0
         files_failed = 0
 
-        for file_item in files_to_process:
+        for idx, file_item in enumerate(files_to_process):
             filepath = file_item['path']
+            
+            # Notify progress callback about current file
+            if progress_callback:
+                progress_callback({
+                    'status': 'processing',
+                    'current_file': filepath,
+                    'current_index': idx + 1,
+                    'total_files': total_files,
+                    'files_processed': files_processed,
+                    'files_failed': files_failed
+                })
 
             try:
                 logger.info(f"Processing: {filepath}")
@@ -642,6 +663,14 @@ def scrape_github_repo(
                 full_documentation += "\n\n---\n\n"
 
                 files_processed += 1
+                
+                # Notify success
+                if progress_callback:
+                    progress_callback({
+                        'status': 'success',
+                        'file': filepath,
+                        'files_processed': files_processed
+                    })
 
                 # Be polite to GitHub API
                 time.sleep(0.5)
@@ -649,9 +678,23 @@ def scrape_github_repo(
             except (NetworkException, ContentParsingException) as e:
                 logger.error(f"Failed to process {filepath}: {e}")
                 files_failed += 1
+                
+                # Notify error
+                if progress_callback:
+                    progress_callback({
+                        'status': 'error',
+                        'file': filepath,
+                        'error': str(e),
+                        'files_failed': files_failed
+                    })
 
             except RateLimitException as e:
                 logger.warning(f"Rate limit hit, stopping: {e}")
+                if progress_callback:
+                    progress_callback({
+                        'status': 'rate_limit',
+                        'error': str(e)
+                    })
                 break
 
         # Generate output filename

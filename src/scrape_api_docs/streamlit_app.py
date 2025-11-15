@@ -140,14 +140,49 @@ def scrape_with_progress(
             if github_token:
                 config.set('github.token', github_token)
 
-            # Call GitHub scraper
+            # Define progress callback for real-time updates
+            def github_progress_callback(progress_data):
+                status = progress_data.get('status')
+                
+                if status == 'discovered':
+                    # Files discovered
+                    total_files = progress_data.get('total_files', 0)
+                    files_list = progress_data.get('files_to_process', [])
+                    state.total_pages = total_files
+                    state.discovered_urls = files_list
+                    state.status_message = f"Discovered {total_files} documentation files"
+                    
+                elif status == 'processing':
+                    # Currently processing a file
+                    current_file = progress_data.get('current_file', '')
+                    current_index = progress_data.get('current_index', 0)
+                    total_files = progress_data.get('total_files', 0)
+                    state.current_url = current_file
+                    state.progress = (current_index / total_files * 100) if total_files > 0 else 0
+                    state.status_message = f"Processing file {current_index}/{total_files}: {current_file}"
+                    
+                elif status == 'success':
+                    # File processed successfully
+                    filepath = progress_data.get('file', '')
+                    files_processed = progress_data.get('files_processed', 0)
+                    if filepath not in state.processed_urls:
+                        state.processed_urls.append(filepath)
+                        
+                elif status == 'error':
+                    # Error processing file
+                    filepath = progress_data.get('file', '')
+                    error = progress_data.get('error', 'Unknown error')
+                    state.errors.append({"url": filepath, "error": error})
+
+            # Call GitHub scraper with callback
             try:
-                # Use the actual GitHub scraper implementation
+                # Use the actual GitHub scraper implementation with progress callback
                 output_path = scrape_github_repo_impl(
                     url=base_url,
                     output_dir="tmp",
                     max_files=max_files_github,
-                    config=config
+                    config=config,
+                    progress_callback=github_progress_callback
                 )
 
                 # Read the generated file
@@ -162,9 +197,6 @@ def scrape_with_progress(
 
                 # Update state
                 state.content = full_documentation
-                state.total_pages = max_files_github  # Approximate
-                state.processed_urls = [base_url]
-                state.discovered_urls = [base_url]
 
                 # Generate base filename
                 base_filename = custom_filename or f"{github_info['owner']}_{github_info['repo']}_documentation"
